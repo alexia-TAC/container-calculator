@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Container Loading Calculator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --muted: #64748b;
+      --subtle: #94a3b8;
+      --accent: #3b82f6;
+      --green: #22c55e;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --header-bg: #0f172a;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Sticky header ───────────────────────────────── */
+    .header {
+      background: var(--header-bg);
+      color: #fff;
+      padding: 14px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 4px 16px rgba(0,0,0,.35);
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .header-title { font-size: 1rem; font-weight: 700; letter-spacing: -.01em; }
+    .header-title span { color: #60a5fa; }
+
+    .total-badge {
+      display: flex; gap: 16px;
+    }
+
+    .total-item { text-align: right; }
+    .total-item .label { font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: #94a3b8; }
+    .total-item .value { font-size: 1.35rem; font-weight: 700; line-height: 1; }
+    .total-item .value.warn { color: #fbbf24; }
+    .total-item .value.over { color: #f87171; }
+
+    /* ── Container cards ─────────────────────────────── */
+    .containers {
+      display: flex;
+      gap: 10px;
+    }
+
+    .c-card {
+      flex: 1;
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 8px;
+      padding: 10px 12px;
+      transition: background .2s;
+    }
+
+    .c-card.fits    { border-color: rgba(74,222,128,.35); }
+    .c-card.tight   { border-color: rgba(251,191,36,.45); }
+    .c-card.over    { border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.07); }
+
+    .c-card-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .c-name { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+    .c-pct  { font-size: .7rem; color: #94a3b8; }
+    .c-cbm  { font-size: .8rem; }
+    .c-cbm strong { font-size: 1rem; font-weight: 700; }
+
+    .bar-track { background: rgba(255,255,255,.15); border-radius: 4px; height: 5px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 4px; transition: width .3s ease, background .3s; }
+
+    .c-status { font-size: .65rem; margin-top: 5px; height: 14px; }
+    .c-status.fits  { color: #4ade80; }
+    .c-status.tight { color: #fbbf24; }
+    .c-status.over  { color: #f87171; }
+
+    /* ── Main content ────────────────────────────────── */
+    .main {
+      max-width: 940px;
+      margin: 24px auto;
+      padding: 0 16px 40px;
+    }
+
+    /* ── Toolbar ─────────────────────────────────────── */
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .search-wrap { position: relative; flex: 1; min-width: 180px; }
+    .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--subtle); pointer-events: none; }
+    .search-input {
+      width: 100%;
+      padding: 8px 12px 8px 34px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: .875rem;
+      background: var(--card);
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: .8rem;
+      font-weight: 500;
+      background: var(--card);
+      color: var(--text);
+      white-space: nowrap;
+      transition: background .15s, border-color .15s;
+    }
+    .btn:hover { background: #f1f5f9; }
+    .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-accent:hover { background: #2563eb; border-color: #2563eb; }
+    .btn-ghost { color: var(--red); border-color: #fecaca; background: #fef2f2; }
+    .btn-ghost:hover { background: #fee2e2; }
+
+    /* ── Product table ───────────────────────────────── */
+    .table-wrap {
+      background: var(--card);
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      overflow: hidden;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    thead th {
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    thead th.right { text-align: right; }
+
+    tbody tr { transition: background .1s; }
+    tbody tr:hover { background: #f8fafc; }
+    tbody tr.hidden { display: none; }
+
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+
+    .sku      { font-size: .7rem; color: var(--subtle); font-family: 'SF Mono', 'Fira Code', monospace; }
+    .pname    { font-size: .875rem; font-weight: 500; }
+    .dims     { font-size: .68rem; color: var(--subtle); margin-top: 2px; }
+    .cbm-unit { font-size: .8rem; color: var(--muted); }
+
+    /* ── Qty stepper ─────────────────────────────────── */
+    .qty-wrap { display: flex; align-items: center; gap: 5px; }
+    .q-btn {
+      width: 26px; height: 26px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      cursor: pointer;
+      font-size: .95rem;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+      user-select: none;
+      transition: background .1s, color .1s;
+    }
+    .q-btn:hover { background: #e2e8f0; color: var(--text); }
+    .q-input {
+      width: 44px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 2px;
+      font-size: .875rem;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+      -moz-appearance: textfield;
+    }
+    .q-input::-webkit-inner-spin-button,
+    .q-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .q-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(59,130,246,.12); }
+    .q-input.active { font-weight: 700; border-color: var(--accent); }
+
+    .sku-total { font-size: .875rem; font-weight: 600; text-align: right; }
+    .sku-total.zero { color: #cbd5e1; }
+    .sku-total.pos  { color: var(--text); }
+
+    /* ── Total row ───────────────────────────────────── */
+    tfoot td {
+      background: #f8fafc;
+      padding: 11px 12px;
+      border-top: 2px solid var(--border);
+      font-weight: 700;
+    }
+    .tfoot-label { font-size: .8rem; color: var(--muted); }
+    .tfoot-total { font-size: 1rem; text-align: right; }
+
+    /* ── Settings panel ──────────────────────────────── */
+    .settings-toggle {
+      display: flex; align-items: center; gap: 6px;
+      font-size: .8rem; color: var(--muted);
+      cursor: pointer; margin-bottom: 14px;
+      user-select: none;
+    }
+    .settings-toggle svg { transition: transform .2s; }
+    .settings-toggle.open svg { transform: rotate(90deg); }
+
+    .settings-panel {
+      background: var(--card);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 16px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .settings-panel.open { display: block; }
+    .settings-title { font-size: .8rem; font-weight: 600; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    .settings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .setting-item label { font-size: .75rem; color: var(--muted); display: block; margin-bottom: 4px; }
+    .setting-item .setting-name { font-size: .8rem; font-weight: 600; margin-bottom: 6px; }
+    .setting-row { display: flex; gap: 6px; align-items: center; }
+    .setting-row span { font-size: .7rem; color: var(--subtle); }
+    .s-input {
+      width: 72px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 4px 6px;
+      font-size: .8rem;
+      outline: none;
+    }
+    .s-input:focus { border-color: var(--accent); }
+    .s-pct { width: 56px; }
+
+    /* ── Footer note ─────────────────────────────────── */
+    .note {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 7px;
+      font-size: .75rem;
+      color: #92400e;
+    }
+
+    /* ── Empty state ─────────────────────────────────── */
+    .empty-row td {
+      text-align: center;
+      padding: 24px;
+      color: var(--subtle);
+      font-size: .875rem;
+    }
+
+    @media (max-width: 640px) {
+      .containers { flex-direction: column; gap: 8px; }
+      .settings-grid { grid-template-columns: 1fr; }
+      .dims { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Sticky header ──────────────────────────────────── -->
+<header class="header">
+  <div class="header-top">
+    <div class="header-title">Container <span>Loading Calculator</span></div>
+    <div class="total-badge">
+      <div class="total-item">
+        <div class="label">Items</div>
+        <div class="value" id="totalItems">0</div>
+      </div>
+      <div class="total-item">
+        <div class="label">Total CBM</div>
+        <div class="value" id="totalCbm">0.000</div>
+      </div>
+    </div>
+  </div>
+  <div class="containers" id="containerCards"></div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- Settings toggle -->
+  <div class="settings-toggle" id="settingsToggle">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2">
+      <polyline points="5 2 10 7 5 12"/>
+    </svg>
+    Container Settings
+  </div>
+
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-title">Container Specifications</div>
+    <div class="settings-grid" id="settingsGrid"></div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="search-input" id="searchInput" type="text" placeholder="Search by SKU or product name…">
+    </div>
+    <button class="btn btn-accent" id="loadDefault">Load Last Order</button>
+    <button class="btn" id="saveBtn">Save Order</button>
+    <button class="btn btn-ghost" id="clearBtn">Clear All</button>
+  </div>
+
+  <!-- Product table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Dimensions (mm)</th>
+          <th class="right">CBM / unit</th>
+          <th style="width:130px; text-align:center">Quantity</th>
+          <th class="right">CBM total</th>
+        </tr>
+      </thead>
+      <tbody id="productBody"></tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4" class="tfoot-label">Grand Total</td>
+          <td class="tfoot-total" id="footTotal">0.000</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="note">All dimensions are outer box dimensions (mm). CBM = Length × Width × Height ÷ 1,000,000,000.</div>
+</main>
+
+<script>
+// ── Data ─────────────────────────────────────────────────
+const CONTAINERS = [
+  { id: '20ft',   name: "20'",   l: 5895,  w: 2350, h: 2392, util: 0.80 },
+  { id: '40ft',   name: "40'",   l: 12029, w: 2350, h: 2392, util: 0.82 },
+  { id: '40hq',   name: "40'HQ", l: 12024, w: 2352, h: 2697, util: 0.82 },
+];
+
+const PRODUCTS = [
+  { sku: 'ABS1001B',    name: 'CTL',                           l: 1330, w: 1100, h: 300 },
+  { sku: 'ABS1003B',    name: 'CS3000',                        l: 1480, w:  620, h: 390 },
+  { sku: 'ABS1004B',    name: 'VC',                            l: 1235, w: 1140, h: 460 },
+  { sku: 'ABS1014B',    name: 'Abs Bench X3',                  l: 1220, w:  865, h: 490 },
+  { sku: 'ABS1008-01B', name: 'AbSolo Crated',                 l: 1710, w:  750, h: 490 },
+  { sku: 'ABS7013B',    name: 'Target Abs',                    l: 1740, w:  605, h: 265 },
+  { sku: 'ABS4001',     name: 'TF180',                         l: 1475, w:  820, h: 680 },
+  { sku: 'ABS4002',     name: 'TFXL',                          l: 1580, w:  870, h: 750 },
+  { sku: 'ABS2003',     name: 'CS1500',                        l: 1250, w:  645, h: 330 },
+  { sku: 'ABS7004B',    name: 'Abs Bench Elite',               l: 1220, w:  820, h: 345 },
+  { sku: 'ABS7008B',    name: 'Lumbar X',                      l: 1215, w:  520, h: 440 },
+  { sku: 'AB1010-1',    name: 'Sledmill A',                    l: 2040, w: 1085, h: 390 },
+  { sku: 'AB1010-2',    name: 'Sledmill B',                    l: 1340, w:  905, h: 340 },
+  { sku: 'AB1020',      name: 'Glute Coaster TL',              l: 1550, w:  785, h: 660 },
+  { sku: 'ABS1015',     name: 'Total Glute',                   l: 1630, w:  690, h: 830 },
+  { sku: 'ABS1016',     name: 'Standing Ab Twist',             l: 1540, w:  775, h: 660 },
+  { sku: 'ABS1017',     name: 'Glute Lift (Resistance)',       l: 1000, w:  810, h: 405 },
+  { sku: 'ABS1018',     name: 'Glute Lift Pro (Plate Loaded)', l: 1400, w:  900, h: 440 },
+  { sku: 'ABS1019',     name: 'Glute Lift Elite (Selectorized)', l: 1535, w: 890, h: 720 },
+  { sku: 'ABS2009',     name: 'CaliLift',                      l:  660, w:  550, h: 100 },
+  { sku: 'ABS3005',     name: 'BRST SYS',                      l:  800, w:  240, h: 150 },
+  { sku: 'ABS3006',     name: 'BRST Rope',                     l:  570, w:  240, h: 150 },
+  { sku: 'ABS2005',     name: 'PS500',                         l: 1270, w:  381, h: 381 },
+  { sku: 'ABS1014P',    name: 'Purple X3',                     l: 1305, w:  925, h: 310 },
+  { sku: 'ABS1001P',    name: 'Purple CTL',                    l: 1315, w: 1085, h: 290 },
+  { sku: 'ABS7013P',    name: 'Purple Target Abs',             l: 1735, w:  595, h: 260 },
+  { sku: 'ABS3020',     name: 'Ab Ball System',                l:  203, w:  203, h: 203 },
+  { sku: 'ABS1026',     name: 'Belt Squat',                    l: 1680, w: 1020, h: 677 },
+  { sku: 'ABS1022',     name: 'Nordic Curl',                   l: 1375, w:  670, h: 240 },
+  { sku: 'ABS1027',     name: 'Froggy',                        l: 1280, w:  920, h: 555 },
+  { sku: 'ABS1024',     name: 'DeadLift',                      l: 1770, w:  790, h: 577 },
+  { sku: 'ABS1028B-A',  name: 'aTAC Box A',                    l: 1265, w:  320, h: 870 },
+  { sku: 'ABS1028B-B',  name: 'aTAC Box B',                    l: 1165, w:  630, h: 120 },
+];
+
+// Default quantities from the Excel "last order"
+const DEFAULT_ORDER = {
+  'ABS1003B': 3, 'ABS1004B': 3, 'ABS1008-01B': 2, 'AB1020': 4,
+  'ABS1015': 4,  'ABS1016': 2,  'ABS1018': 3,     'ABS1019': 2,
+  'ABS1022': 2,  'ABS1027': 7,  'ABS1024': 3,     'ABS1028B-A': 2,
+  'ABS1028B-B': 2,
+};
+
+// ── State ─────────────────────────────────────────────────
+const qty  = {};          // sku → quantity
+const containers = CONTAINERS.map(c => ({ ...c }));  // mutable copy
+
+PRODUCTS.forEach(p => { qty[p.sku] = 0; });
+
+// ── Helpers ───────────────────────────────────────────────
+function cbmPerUnit(p) { return (p.l * p.w * p.h) / 1e9; }
+function containerLimit(c) { return (c.l * c.w * c.h) / 1e9 * c.util; }
+function totalCbm() { return PRODUCTS.reduce((s, p) => s + cbmPerUnit(p) * (qty[p.sku] || 0), 0); }
+function totalItems() { return PRODUCTS.reduce((s, p) => s + (qty[p.sku] || 0), 0); }
+function fmt(n) { return n.toFixed(3); }
+
+// ── Build Settings panel ──────────────────────────────────
+function buildSettings() {
+  const grid = document.getElementById('settingsGrid');
+  grid.innerHTML = '';
+  containers.forEach((c, i) => {
+    const limit = containerLimit(c);
+    const div = document.createElement('div');
+    div.className = 'setting-item';
+    div.innerHTML = `
+      <div class="setting-name">${c.name} Container</div>
+      <label>Internal (L × W × H mm)</label>
+      <div class="setting-row">
+        <input class="s-input" data-ci="${i}" data-field="l" type="number" value="${c.l}" min="1">
+        <span>×</span>
+        <input class="s-input" data-ci="${i}" data-field="w" type="number" value="${c.w}" min="1">
+        <span>×</span>
+        <input class="s-input" data-ci="${i}" data-field="h" type="number" value="${c.h}" min="1">
+      </div>
+      <label style="margin-top:8px">Utilization rate</label>
+      <div class="setting-row">
+        <input class="s-input s-pct" data-ci="${i}" data-field="util" type="number" value="${Math.round(c.util*100)}" min="1" max="100">
+        <span>%  →  ${fmt(limit)} CBM limit</span>
+      </div>`;
+    grid.appendChild(div);
+  });
+
+  grid.querySelectorAll('.s-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const ci = +inp.dataset.ci, field = inp.dataset.field;
+      const v = parseFloat(inp.value);
+      if (isNaN(v) || v <= 0) return;
+      containers[ci][field] = field === 'util' ? v / 100 : v;
+      // Update the limit display in same setting-item
+      const item = inp.closest('.setting-item');
+      const limitSpan = item.querySelectorAll('.setting-row')[1].querySelector('span');
+      limitSpan.textContent = `%  →  ${fmt(containerLimit(containers[ci]))} CBM limit`;
+      update();
+    });
+  });
+}
+
+// ── Build product rows ────────────────────────────────────
+function buildTable() {
+  const tbody = document.getElementById('productBody');
+  tbody.innerHTML = '';
+
+  PRODUCTS.forEach(p => {
+    const cbm = cbmPerUnit(p);
+    const tr = document.createElement('tr');
+    tr.dataset.sku = p.sku;
+    tr.dataset.search = `${p.sku} ${p.name}`.toLowerCase();
+    tr.innerHTML = `
+      <td>
+        <div class="sku">${p.sku}</div>
+        <div class="pname">${p.name}</div>
+      </td>
+      <td><span class="dims">${p.l} × ${p.w} × ${p.h}</span></td>
+      <td style="text-align:right"><span class="cbm-unit">${fmt(cbm)}</span></td>
+      <td style="text-align:center">
+        <div class="qty-wrap" style="justify-content:center">
+          <button class="q-btn q-dec" data-sku="${p.sku}">−</button>
+          <input class="q-input" data-sku="${p.sku}" type="number" min="0" value="0">
+          <button class="q-btn q-inc" data-sku="${p.sku}">+</button>
+        </div>
+      </td>
+      <td class="sku-total zero" data-sku="${p.sku}">—</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Event delegation
+  tbody.addEventListener('click', e => {
+    const btn = e.target.closest('.q-btn');
+    if (!btn) return;
+    const sku = btn.dataset.sku;
+    if (btn.classList.contains('q-inc')) setQty(sku, (qty[sku] || 0) + 1);
+    if (btn.classList.contains('q-dec')) setQty(sku, Math.max(0, (qty[sku] || 0) - 1));
+  });
+
+  tbody.addEventListener('input', e => {
+    if (!e.target.classList.contains('q-input')) return;
+    const sku = e.target.dataset.sku;
+    const v = parseInt(e.target.value, 10);
+    qty[sku] = isNaN(v) || v < 0 ? 0 : v;
+    update();
+  });
+}
+
+// ── Set qty helper ────────────────────────────────────────
+function setQty(sku, val) {
+  qty[sku] = val;
+  const inp = document.querySelector(`.q-input[data-sku="${sku}"]`);
+  if (inp) inp.value = val;
+  update();
+}
+
+// ── Update all calculated fields ──────────────────────────
+function update() {
+  const total = totalCbm();
+  const items = totalItems();
+
+  // Header totals
+  const cbmEl = document.getElementById('totalCbm');
+  cbmEl.textContent = fmt(total);
+  cbmEl.className = 'value';
+  document.getElementById('totalItems').textContent = items;
+
+  // Container cards
+  const cardsEl = document.getElementById('containerCards');
+  cardsEl.innerHTML = '';
+  containers.forEach(c => {
+    const limit = containerLimit(c);
+    const pct   = total / limit;
+    const pctCapped = Math.min(pct, 1);
+    const rem   = Math.max(0, limit - total);
+
+    let state, barColor, statusText;
+    if (pct > 1)      { state = 'over';  barColor = '#f87171'; statusText = `↑ ${fmt(total - limit)} CBM over limit`; }
+    else if (pct > .85){ state = 'tight'; barColor = '#fbbf24'; statusText = `${fmt(rem)} CBM remaining`; }
+    else               { state = 'fits';  barColor = '#4ade80'; statusText = `${fmt(rem)} CBM remaining`; }
+
+    const div = document.createElement('div');
+    div.className = `c-card ${state}`;
+    div.innerHTML = `
+      <div class="c-card-row">
+        <span class="c-name">${c.name}</span>
+        <span class="c-pct">${Math.round(pct * 100)}%</span>
+      </div>
+      <div class="c-card-row">
+        <span class="c-cbm"><strong>${fmt(total)}</strong> / ${fmt(limit)} CBM</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${pctCapped * 100}%; background:${barColor}"></div>
+      </div>
+      <div class="c-status ${state}">${statusText}</div>`;
+    cardsEl.appendChild(div);
+  });
+
+  // Per-SKU totals
+  PRODUCTS.forEach(p => {
+    const q = qty[p.sku] || 0;
+    const skuCbm = cbmPerUnit(p) * q;
+    const cell = document.querySelector(`.sku-total[data-sku="${p.sku}"]`);
+    const inp  = document.querySelector(`.q-input[data-sku="${p.sku}"]`);
+    if (cell) {
+      cell.textContent = q > 0 ? fmt(skuCbm) : '—';
+      cell.className   = `sku-total ${q > 0 ? 'pos' : 'zero'}`;
+    }
+    if (inp) {
+      inp.value = q;
+      inp.className = q > 0 ? 'q-input active' : 'q-input';
+    }
+  });
+
+  // Footer total
+  document.getElementById('footTotal').textContent = fmt(total);
+
+  // Persist to localStorage
+  localStorage.setItem('cc-order', JSON.stringify(qty));
+}
+
+// ── Search ────────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', function() {
+  const q = this.value.toLowerCase().trim();
+  document.querySelectorAll('#productBody tr').forEach(tr => {
+    tr.classList.toggle('hidden', q.length > 0 && !tr.dataset.search.includes(q));
+  });
+  const visible = document.querySelectorAll('#productBody tr:not(.hidden)').length;
+  let empty = document.querySelector('.empty-row');
+  if (visible === 0 && !empty) {
+    empty = document.createElement('tr');
+    empty.className = 'empty-row';
+    empty.innerHTML = `<td colspan="5">No products match "${q}"</td>`;
+    document.getElementById('productBody').appendChild(empty);
+  } else if (visible > 0 && empty) {
+    empty.remove();
+  }
+});
+
+// ── Buttons ───────────────────────────────────────────────
+document.getElementById('loadDefault').addEventListener('click', () => {
+  PRODUCTS.forEach(p => { qty[p.sku] = DEFAULT_ORDER[p.sku] || 0; });
+  update();
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  PRODUCTS.forEach(p => { qty[p.sku] = 0; });
+  update();
+});
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  localStorage.setItem('cc-saved', JSON.stringify(qty));
+  const btn = document.getElementById('saveBtn');
+  btn.textContent = 'Saved ✓';
+  setTimeout(() => { btn.textContent = 'Save Order'; }, 1800);
+});
+
+// ── Settings toggle ───────────────────────────────────────
+document.getElementById('settingsToggle').addEventListener('click', function() {
+  this.classList.toggle('open');
+  document.getElementById('settingsPanel').classList.toggle('open');
+});
+
+// ── Init ──────────────────────────────────────────────────
+buildSettings();
+buildTable();
+
+// Restore from saved session or load defaults
+const saved = localStorage.getItem('cc-order');
+if (saved) {
+  try {
+    const parsed = JSON.parse(saved);
+    Object.entries(parsed).forEach(([sku, q]) => { if (qty.hasOwnProperty(sku)) qty[sku] = q; });
+  } catch(e) {}
+}
+
+update();
+</script>
+</body>
+</html>
